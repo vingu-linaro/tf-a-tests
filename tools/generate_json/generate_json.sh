@@ -22,12 +22,14 @@ shift # Shift arguments 1
 PARTITION_ALREADY_PRESENT=false
 
 CACTUS_PRESENT=false
+SCMI_PRESENT=false
 IVY_PRESENT=false
 IVY_SHIM_PRESENT=false
 
 for target in "$@"; do
 	case $target in
 		cactus) CACTUS_PRESENT=true ;;
+		scmi) SCMI_PRESENT=true ;;
 		ivy) IVY_PRESENT=true ;;
 		ivy_shim) IVY_SHIM_PRESENT=true ;;
 		*) echo "Invalid target $target"; exit 1 ;;
@@ -61,11 +63,33 @@ if [ $CACTUS_PRESENT == "true" ]; then
 	"physical-load-address": "0x7100000",
 	"owner": "Plat",
 	"package": "tl_pkg"
+EOF
+
+if [ $SCMI_PRESENT == "false" ]; then
+	cat >> "$GENERATED_JSON" << EOF
 },
 
 "cactus-tertiary" : {
 	"image": "cactus.bin",
 	"pm": "cactus-tertiary.dts",
+	"physical-load-address": "0x7200000",
+	"owner": "Plat",
+	"package": "tl_pkg",
+	"size": "0x300000"
+EOF
+fi
+	PARTITION_ALREADY_PRESENT=true
+fi
+
+if [ $SCMI_PRESENT == "true" ]; then
+	if [ $PARTITION_ALREADY_PRESENT == "true" ]; then
+		echo -ne "\t},\n\n" >> "$GENERATED_JSON"
+	fi
+
+	cat >> "$GENERATED_JSON" << EOF
+"scmi-primary" : {
+	"image": "scmi.bin",
+	"pm": "scmi.dts",
 	"physical-load-address": "0x7200000",
 	"owner": "Plat",
 	"package": "tl_pkg",
