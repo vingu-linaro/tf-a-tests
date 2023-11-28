@@ -451,6 +451,11 @@ cactus:
 	@echo "ERROR: $@ is supported only on AArch64 FVP or TC."
 	@exit 1
 
+.PHONY: scmi
+scmi:
+	@echo "ERROR: $@ is supported only on AArch64 FVP or TC."
+	@exit 1
+
 .PHONY: ivy
 ivy:
 	@echo "ERROR: $@ is supported only on AArch64 FVP or TC."
@@ -568,6 +573,28 @@ all : $(1)
 
 endef
 
+define COPY_IMG
+	$(eval IMG_PREFIX := $(call uppercase, $(1)))
+	$(eval BUILD_DIR  := ${BUILD_PLAT}/$(1))
+	$(eval BIN        := $(BUILD_PLAT)/$(1).bin)
+
+$(BUILD_DIR) :
+	$$(Q)mkdir -p "$$@"
+
+$(BIN) :
+	@echo "  BIN     $$@"
+	cp  ${EXTERNAL_SCMI}/scmi.bin $$@
+	cp  ${EXTERNAL_SCMI}/scmi.dtb ${BUILD_PLAT}/
+	cp  ${EXTERNAL_SCMI}/scmi.dts ${BUILD_PLAT}/
+	@echo
+	@echo "Built $$@ successfully"
+	@echo
+
+.PHONY : $(1)
+$(1) : $(BUILD_DIR) $(BIN)
+
+endef
+
 ifeq (${ARCH},aarch32)
         ARCH_TESTS_SKIP_LIST    := tftf/tests/aarch32_tests_to_skip.txt
 endif
@@ -597,6 +624,10 @@ endif
 ifeq (${ARCH}-${PLAT},aarch64-fvp)
   $(eval $(call MAKE_IMG,cactus_mm))
   $(eval $(call MAKE_IMG,cactus))
+ifneq (${EXTERNAL_SCMI},)
+  SECURE_PARTITIONS	+= scmi
+  $(eval $(call COPY_IMG,scmi))
+endif
   $(eval $(call MAKE_IMG,ivy))
 endif
 
