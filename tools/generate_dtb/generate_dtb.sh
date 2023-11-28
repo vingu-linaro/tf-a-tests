@@ -43,6 +43,7 @@ BSS_END=$(grep __BSS_END__ $MAPFILE | awk {'print $1'})
 cat "$ORIGINAL_DTS" > "$COMBINED_DTS"
 
 INCLUDES="-I spm/cactus
+	  -I spm/scmi
 	  -I spm/ivy
 	  -I spm/include
 	  -I include/lib"
