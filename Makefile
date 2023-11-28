@@ -144,6 +144,7 @@ endif
 ifeq (${ARCH}-${PLAT},$(filter ${ARCH}-${PLAT},aarch64-fvp aarch64-tc))
 include spm/cactus/cactus.mk
 include spm/ivy/ivy.mk
+include spm/scmi/cactus.mk
 endif
 
 ################################################################################
@@ -312,6 +313,7 @@ NS_BL1U_CFLAGS		+= -mbranch-protection=${BP_OPTION}
 NS_BL2U_CFLAGS		+= -mbranch-protection=${BP_OPTION}
 CACTUS_MM_CFLAGS	+= -mbranch-protection=${BP_OPTION}
 CACTUS_CFLAGS		+= -mbranch-protection=${BP_OPTION}
+SCMI_CFLAGS		+= -mbranch-protection=${BP_OPTION}
 IVY_CFLAGS		+= -mbranch-protection=${BP_OPTION}
 REALM_CFLAGS		+= -mbranch-protection=${BP_OPTION}
 endif
@@ -351,6 +353,12 @@ CACTUS_INCLUDES		+= ${PLAT_INCLUDES}
 CACTUS_CFLAGS		+= ${COMMON_CFLAGS} -fpie
 CACTUS_ASFLAGS		+= ${COMMON_ASFLAGS}
 CACTUS_LDFLAGS		+= ${COMMON_LDFLAGS} $(PIE_LDFLAGS)
+
+#SCMI_SOURCES		+= ${LIBC_SRCS}
+#SCMI_INCLUDES		+= ${PLAT_INCLUDES}
+SCMI_CFLAGS		+= ${COMMON_CFLAGS} -fpie
+SCMI_ASFLAGS		+= ${COMMON_ASFLAGS}
+SCMI_LDFLAGS		+= ${COMMON_LDFLAGS} $(PIE_LDFLAGS)
 
 IVY_SOURCES		+= ${LIBC_SRCS}
 IVY_INCLUDES		+= ${PLAT_INCLUDES}
@@ -452,6 +460,11 @@ cactus:
 	@echo "ERROR: $@ is supported only on AArch64 FVP or TC."
 	@exit 1
 
+.PHONY: scmi
+scmi:
+	@echo "ERROR: $@ is supported only on AArch64 FVP or TC."
+	@exit 1
+
 .PHONY: ivy
 ivy:
 	@echo "ERROR: $@ is supported only on AArch64 FVP or TC."
@@ -546,8 +559,9 @@ $(ELF) : $(OBJS) $(LINKERFILE)
 	@echo 'const char build_message[] = "Built : "__TIME__", "__DATE__; \
                const char version_string[] = "${VERSION_STRING}";' | \
 		$$(CC) $$(${IMG_PREFIX}_CFLAGS) ${${IMG_PREFIX}_INCLUDES} ${${IMG_PREFIX}_DEFINES} -c -xc - -o $(BUILD_DIR)/build_message.o
-	$$(Q)$$(LD) -o $$@ $$(${IMG_PREFIX}_LDFLAGS) -Map=$(MAPFILE) \
-		-T $(LINKERFILE) $(BUILD_DIR)/build_message.o $(OBJS)
+	$$(Q)$$(LD) -o $$@ -Map=$(MAPFILE) \
+		-T $(LINKERFILE) $(BUILD_DIR)/build_message.o $(OBJS) \
+		$$(${IMG_PREFIX}_LDFLAGS)
 
 $(DUMP) : $(ELF)
 	@echo "  OD      $$@"
@@ -564,6 +578,28 @@ $(BIN) : $(ELF)
 $(1) : $(BUILD_DIR) $(BIN) $(DUMP)
 
 all : $(1)
+
+endef
+
+define COPY_IMG
+	$(eval IMG_PREFIX := $(call uppercase, $(1)))
+	$(eval BUILD_DIR  := ${BUILD_PLAT}/$(1))
+	$(eval BIN        := $(BUILD_PLAT)/$(1).bin)
+
+$(BUILD_DIR) :
+	$$(Q)mkdir -p "$$@"
+
+$(BIN) :
+	@echo "  BIN     $$@"
+	cp  ${EXTERNAL_SCMI}/scmi.bin $$@
+	cp  ${EXTERNAL_SCMI}/scmi.dtb ${BUILD_PLAT}/
+	cp  ${EXTERNAL_SCMI}/scmi.dts ${BUILD_PLAT}/
+	@echo
+	@echo "Built $$@ successfully"
+	@echo
+
+.PHONY : $(1)
+$(1) : $(BUILD_DIR) $(BIN)
 
 endef
 
@@ -596,6 +632,10 @@ endif
 ifeq (${ARCH}-${PLAT},aarch64-fvp)
   $(eval $(call MAKE_IMG,cactus_mm))
   $(eval $(call MAKE_IMG,cactus))
+  $(eval $(call MAKE_IMG,scmi))
+ifneq (${EXTERNAL_SCMI},)
+  $(eval $(call COPY_IMG,scmi))
+endif
   $(eval $(call MAKE_IMG,ivy))
 endif
 
