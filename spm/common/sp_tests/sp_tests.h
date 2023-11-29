@@ -13,6 +13,6 @@
  * Test functions
  */
 
-void ffa_tests(struct mailbox_buffers *mb);
+void ffa_tests(struct mailbox_buffers *mb, ffa_id_t my_ffa_id);
 
 #endif /* CACTUS_TESTS_H */

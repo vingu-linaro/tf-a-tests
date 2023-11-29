@@ -14,6 +14,8 @@
 #include <spm_helpers.h>
 #include <spm_common.h>
 #include <lib/libc/string.h>
+#include <xlat_tables_defs.h>
+#include <lib/xlat_tables/xlat_tables_v2.h>
 
 /* FFA version test helpers */
 #define FFA_MAJOR 1U
@@ -252,7 +254,232 @@ void ffa_spm_id_get_test(void)
 	}
 }
 
-void ffa_tests(struct mailbox_buffers *mb)
+static const struct ffa_uuid scmi_uuid = {TERTIARY_UUID};
+static const struct ffa_partition_info ffa_expected_scmi_info = 
+	{
+		.id = SP_ID(3),
+		.exec_context = TERTIARY_EXEC_CTX_COUNT,
+		.properties = (FFA_PARTITION_AARCH64_EXEC |
+			       FFA_PARTITION_DIRECT_REQ_RECV |
+			       FFA_PARTITION_DIRECT_REQ_SEND |
+			       FFA_PARTITION_NOTIFICATION),
+		.uuid = {TERTIARY_UUID}
+	};
+
+enum scmi_ffa_pta_cmd {
+	/*
+	 * FFA_SCMI_CMD_CAPABILITIES - Get channel capabilities
+	 *
+	 * [out]    data0: Cmd FFA_SCMI_CMD_CAPABILITIES
+	 * [in]    data1: Capability bit mask
+	 */
+	FFA_SCMI_CMD_CAPABILITIES = 0,
+
+	/*
+	 * FFA_SCMI_CMD_GET_CHANNEL - Get channel handle
+	 *
+	 * [out]    data0: Cmd FFA_SCMI_CMD_GET_CHANNEL
+	 * [out]    data1: Channel identifier
+	 * [in]     data1: Returned channel handle
+	 * [out]    data2: Shared memory handle (optional)
+	 */
+	FFA_SCMI_CMD_GET_CHANNEL = 1,
+
+	/*
+	 * FFA_SCMI_CMD_MSG_SEND_DIRECT_REQ - Process direct SCMI message
+	 * with shared memory
+	 *
+	 * [out]    data0: Cmd FFA_SCMI_CMD_MSG_SEND_DIRECT_REQ
+	 * [out]    data1: Channel handle
+	 * [in/out] data2: Response size
+	 *
+	 */
+	FFA_SCMI_CMD_MSG_SEND_DIRECT_REQ = 2,
+
+	/*
+	 * FFA_SCMI_CMD_SEND_MSG2 - Process SCMI message in RXTX buffer
+	 *
+	 * Use FFA RX/TX message to exchange request with the SCMI server.
+	 */
+	FFA_SCMI_CMD_MSG_SEND2 = 3,
+};
+
+#ifdef PLAT_XLAT_TABLES_DYNAMIC
+/**
+ * Each Cactus SP has a memory region dedicated to memory sharing tests
+ * described in their partition manifest.
+ * This function returns the expected base address depending on the
+ * SP ID (should be the same as the manifest).
+ */
+static void *share_page(ffa_id_t cactus_sp_id)
+{
+	switch (cactus_sp_id) {
+	case SP_ID(1):
+		return (void *)CACTUS_SP1_MEM_SHARE_BASE;
+	case SP_ID(2):
+		return (void *)CACTUS_SP2_MEM_SHARE_BASE;
+	case SP_ID(3):
+		return (void *)CACTUS_SP3_MEM_SHARE_BASE;
+	default:
+		ERROR("Helper function expecting a valid Cactus SP ID!\n");
+		panic();
+	}
+}
+
+static void *share_page_non_secure(ffa_id_t cactus_sp_id)
+{
+	if (cactus_sp_id != SP_ID(3)) {
+		ERROR("Helper function expecting a valid Cactus SP ID!\n");
+		panic();
+	}
+
+	return (void *)CACTUS_SP3_NS_MEM_SHARE_BASE;
+}
+
+ffa_memory_handle_t ffa_scmi_share_memory(struct mailbox_buffers *mb, ffa_id_t source, ffa_id_t dest)
+{
+	struct ffa_value ffa_ret;
+	uint32_t mem_func = FFA_MEM_SHARE_SMC32;
+	ffa_memory_handle_t handle;
+	bool non_secure = false;
+	void *share_page_addr =
+		non_secure ? share_page_non_secure(source) : share_page(source);
+	unsigned int mem_attrs;
+	int ret;
+
+	VERBOSE("%x requested to send memory to %x (func: %x), page: %llx\n",
+		source, dest, mem_func, (uint64_t)share_page_addr);
+
+	const struct ffa_memory_region_constituent constituents[] = {
+		{share_page_addr, 1, 0}
+	};
+
+	const uint32_t constituents_count = (sizeof(constituents) /
+					     sizeof(constituents[0]));
+
+	VERBOSE("Sharing at 0x%llx\n", (uint64_t)constituents[0].address);
+	mem_attrs = MT_RW_DATA;
+
+	if (non_secure) {
+		mem_attrs |= MT_NS;
+	}
+
+	ret = mmap_add_dynamic_region(
+		(uint64_t)constituents[0].address,
+		(uint64_t)constituents[0].address,
+		constituents[0].page_count * PAGE_SIZE,
+		mem_attrs);
+
+	if (ret != 0) {
+		ERROR("Failed map share memory before sending (%d)!\n",
+		      ret);
+		return 0;
+	}
+
+	handle = memory_init_and_send(
+		(struct ffa_memory_region *)mb->send, PAGE_SIZE,
+		source, dest, constituents,
+		constituents_count, mem_func, &ffa_ret);
+
+	return handle;
+}
+#else
+ffa_memory_handle_t ffa_scmi_share_memory(struct mailbox_buffers *mb, ffa_id_t source, ffa_id_t dest)
+{
+	return 0;
+}
+
+static void *share_page(ffa_id_t cactus_sp_id)
+{
+	return NULL;
+}
+#endif
+
+struct scmi_msg_payld {
+	uint32_t msg_header;
+	uint32_t msg_payload[];
+};
+
+void ffa_scmi_server_test(struct mailbox_buffers *mb, ffa_id_t source_id)
+{
+	ffa_id_t dest_id;
+	uint64_t cmd, val0, val1, val2, val3;
+	struct ffa_value ret;
+	ffa_memory_handle_t mem_id;
+	uint32_t channel_id;
+	struct scmi_msg_payld *share_page_addr;
+
+	INFO("Test SCMI server partition\n");
+	if (ffa_partition_info_helper(mb, scmi_uuid, &ffa_expected_scmi_info, 1))
+		INFO("SCMI server partition is present\n");
+	else
+		return;
+
+	dest_id = ffa_expected_scmi_info.id;
+
+	cmd = FFA_SCMI_CMD_CAPABILITIES;
+	val0 = val1 = val2 = val3 = 0;
+
+	ret = ffa_msg_send_direct_req64(source_id, dest_id, cmd, val0, val1, val2, val3);
+	if (!is_ffa_direct_response(ret)) {
+		INFO("SCMI server fails\n");
+		return;
+	}
+
+	INFO("SCMI server capabilities 0x%lx\n", ret.arg4);
+
+#ifndef PLAT_XLAT_TABLES_DYNAMIC
+	/* stop here because we can't dynamiccally map memory */
+	return;
+#endif
+
+	mem_id = ffa_scmi_share_memory(mb, source_id, dest_id);
+
+	cmd = FFA_SCMI_CMD_GET_CHANNEL;
+	val0 = 0;
+	val1 = mem_id;
+	val2 = val3 = 0;
+
+	ret = ffa_msg_send_direct_req64(source_id, dest_id, cmd, val0, val1, val2, val3);
+	if (!is_ffa_direct_response(ret)) {
+		INFO("SCMI server fails\n");
+		return;
+	}
+
+	channel_id = ret.arg4;
+	INFO("SCMI server channel id 0x%x\n", channel_id);
+
+	if (channel_id == 0xffffffff)
+		return;
+
+	cmd = FFA_SCMI_CMD_MSG_SEND_DIRECT_REQ;
+	val0 = channel_id;
+	val1 = 16;
+	val2 = val3 = 0;
+
+	/* 1-1 PA-VA mapping */
+	/* scmi header :
+	 * token :       [27:18]
+	 * protocol_id : [17:10]
+	 * message_type: [9:8]
+	 * message_id :  [7:0]
+	 */
+	share_page_addr = share_page(source_id);
+	share_page_addr->msg_header = 0x10 << 10 | 0x3;
+
+	return;
+
+	ret = ffa_msg_send_direct_req64(source_id, dest_id, cmd, val0, val1, val2, val3);
+	if (!is_ffa_direct_response(ret)) {
+		INFO("SCMI server fails\n");
+		return;
+	}
+
+	INFO("SCMI server returned size 0x%lx\n", ret.arg5);
+
+}
+
+void ffa_tests(struct mailbox_buffers *mb, ffa_id_t my_ffa_id)
 {
 	const char *test_ffa = "FF-A setup and discovery";
 
@@ -263,6 +490,7 @@ void ffa_tests(struct mailbox_buffers *mb)
 	ffa_spm_id_get_test();
 	ffa_partition_info_get_test(mb);
 	ffa_partition_info_get_regs_test();
+	ffa_scmi_server_test(mb, my_ffa_id);
 
 	announce_test_section_end(test_ffa);
 }

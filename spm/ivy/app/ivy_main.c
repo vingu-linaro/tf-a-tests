@@ -47,7 +47,7 @@ init:
 		panic();
 	}
 
-	ffa_tests(&mb);
+	ffa_tests(&mb, my_id);
 
 	ret = ffa_msg_wait();
 
