@@ -158,6 +158,27 @@ static void *scmi_memory_retrieve(ffa_id_t source, ffa_id_t vm_id, uint64_t hand
 	return ptr;
 }
 
+/*
+ * Relinquish shared memory.
+ */
+static void scmi_memory_relinquish(ffa_id_t source, ffa_id_t vm_id, uint64_t handle, struct mailbox_buffers *mb, uintptr_t mem)
+{
+	int ret;
+	NOTICE("Unmap and relinquish the memory\n");
+
+	ret = mmap_remove_dynamic_region(mem, PAGE_SIZE);
+	if (ret != 0) {
+		ERROR("Failed to unmap received memory region(%d)!\n", ret);
+		return;
+	}
+
+	if (!memory_relinquish((struct ffa_mem_relinquish *)mb->send,
+		handle, vm_id)) {
+		ERROR("Failed to relinquish the received memory region(%d)!\n", ret);
+		return;
+	}
+}
+
 /**
  * Traverses command table from section ".cactus_handler", searches for a
  * registered command and invokes the respective handler.
@@ -195,11 +216,11 @@ bool cactus_handle_cmd(struct ffa_value *cmd_args, struct ffa_value *ret,
 		{
 		ffa_id_t source = ffa_dir_msg_source(*cmd_args);
 		ffa_id_t vm_id = ffa_dir_msg_dest(*cmd_args);
-		uint64_t channel = cmd_args->arg4;
+		unsigned int channel = (unsigned int)cmd_args->arg4;
 		uint64_t handle = cmd_args->arg5;
 		void *buffer;
 
-		NOTICE("scmi_get_channel VM id: %x chnl: %llx mem hdl: %llx\n",
+		NOTICE("scmi_get_channel VM id: %x chnl: %x mem hdl: %llx\n",
 				vm_id, channel, handle);
 
 		buffer = scmi_memory_retrieve(source, vm_id, handle, mb);
@@ -208,7 +229,9 @@ bool cactus_handle_cmd(struct ffa_value *cmd_args, struct ffa_value *ret,
 
 		channel = scmi_get_device(channel, vm_id, buffer);
 
-		/* if channel == -1, then release the memory */
+		/* Didn't get the channel, relinquich the shared memory */
+		if (channel == (unsigned int)(-1))
+			scmi_memory_relinquish(source, vm_id, handle, mb, (uintptr_t)buffer);
 
 		*ret = cactus_send_response32(ffa_dir_msg_dest(*cmd_args),
 				    ffa_dir_msg_source(*cmd_args),
