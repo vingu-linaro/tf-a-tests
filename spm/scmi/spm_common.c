@@ -15,12 +15,17 @@
 bool memory_retrieve(struct mailbox_buffers *mb,
 		     struct ffa_memory_region **retrieved, uint64_t handle,
 		     ffa_id_t sender, ffa_id_t receiver,
-		     ffa_memory_region_flags_t flags)
+		     ffa_memory_region_flags_t flags,
+		     uint32_t mem_func)
 {
 	struct ffa_value ret;
 	uint32_t fragment_size;
 	uint32_t total_size;
 	uint32_t descriptor_size;
+	const enum ffa_instruction_access inst_access =
+				(mem_func == FFA_MEM_SHARE_SMC32)
+					? FFA_INSTRUCTION_ACCESS_NOT_SPECIFIED
+					: FFA_INSTRUCTION_ACCESS_NX;
 
 	if (retrieved == NULL || mb == NULL) {
 		ERROR("Invalid parameters!\n");
@@ -30,7 +35,7 @@ bool memory_retrieve(struct mailbox_buffers *mb,
 	descriptor_size = ffa_memory_retrieve_request_init(
 	    mb->send, handle, sender, receiver, 0, flags,
 	    FFA_DATA_ACCESS_RW,
-	    FFA_INSTRUCTION_ACCESS_NX,
+	    inst_access,
 	    FFA_MEMORY_NORMAL_MEM,
 	    FFA_MEMORY_CACHE_WRITE_BACK,
 	    FFA_MEMORY_INNER_SHAREABLE);

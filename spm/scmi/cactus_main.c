@@ -114,9 +114,8 @@ static void *scmi_memory_retrieve(ffa_id_t source, ffa_id_t vm_id, uint64_t hand
 	unsigned int mem_attrs;
 	void *ptr;
 	ffa_memory_region_flags_t retrv_flags = 0;
-	bool non_secure = true;
 
-	if (!memory_retrieve(mb, &m, handle, source, vm_id, retrv_flags)){
+	if (!memory_retrieve(mb, &m, handle, source, vm_id, retrv_flags, FFA_MEM_SHARE_SMC32)){
 		ERROR("Failed to received memory region!\n");
 		return 0;
 	}
@@ -133,7 +132,9 @@ static void *scmi_memory_retrieve(ffa_id_t source, ffa_id_t vm_id, uint64_t hand
 
 	mem_attrs = MT_RW_DATA | MT_EXECUTE_NEVER;
 
-	if (non_secure) {
+	if (ffa_get_memory_security_attr(m->attributes) ==
+	    FFA_MEMORY_SECURITY_NON_SECURE) {
+		VERBOSE("Mem security attr non secure\n");
 		mem_attrs |= MT_NS;
 	}
 
