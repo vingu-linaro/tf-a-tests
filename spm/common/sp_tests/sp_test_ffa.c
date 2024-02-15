@@ -469,7 +469,7 @@ void ffa_scmi_server_test(struct mailbox_buffers *mb, ffa_id_t source_id)
 	share_page_addr = share_page(source_id);
 	share_page_addr->msg_header = 0x10 << 10 | 0x3;
 
-	return;
+//	return;
 
 	ret = ffa_msg_send_direct_req64(source_id, dest_id, cmd, val0, val1, val2, val3);
 	if (!is_ffa_direct_response(ret)) {
