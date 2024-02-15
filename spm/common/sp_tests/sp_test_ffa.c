@@ -449,8 +449,10 @@ void ffa_scmi_server_test(struct mailbox_buffers *mb, ffa_id_t source_id)
 	channel_id = ret.arg4;
 	INFO("SCMI server channel id 0x%x\n", channel_id);
 
-	if (channel_id == 0xffffffff)
+	if (channel_id == 0xffffffff) {
+		ffa_mem_reclaim(mem_id, 0);
 		return;
+	}
 
 	cmd = FFA_SCMI_CMD_MSG_SEND_DIRECT_REQ;
 	val0 = channel_id;
