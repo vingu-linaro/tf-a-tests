@@ -26,7 +26,7 @@
 	load-address = <0x7100000>;
 	entrypoint-offset = <0x00004000>;
 	xlat-granule = <0>; /* 4KiB */
-	boot-order = <1>;
+	boot-order = <2>;
 	messaging-method = <3>; /* Direct messaging only */
 	ns-interrupts-action = <2>; /* Non secure interrupts are signaled. */
 	notification-support; /* Support receipt of notifications. */
