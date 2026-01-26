@@ -614,9 +614,8 @@ DEFINE_RENAME_SYSREG_READ_FUNC(trcdevarch, TRCDEVARCH)
 /* FEAT_HCX HCRX_EL2 */
 DEFINE_RENAME_SYSREG_RW_FUNCS(hcrx_el2, HCRX_EL2)
 
-/* Floating point control and status register */
+/* Control floating point behaviour */
 DEFINE_RENAME_SYSREG_RW_FUNCS(fpcr, FPCR)
-DEFINE_RENAME_SYSREG_RW_FUNCS(fpsr, FPSR)
 
 /* ID_AA64ISAR2_EL1 */
 DEFINE_RENAME_SYSREG_READ_FUNC(id_aa64isar2_el1, ID_AA64ISAR2_EL1)

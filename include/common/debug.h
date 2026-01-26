@@ -9,10 +9,6 @@
 
 #include <stdio.h>
 
-#ifdef IMAGE_CACTUS_MM
-/* Remove dependency on spinlocks for Cactus-MM */
-#define mp_printf printf
-#else
 /*
  * Print a formatted string on the UART.
  *
@@ -22,12 +18,6 @@
  */
 __attribute__((format(printf, 1, 2)))
 void mp_printf(const char *fmt, ...);
-#endif /* IMAGE_CACTUS_MM */
-
-#ifdef IMAGE_REALM
-void realm_printf(const char *fmt, ...);
-#define mp_printf realm_printf
-#endif
 
 /*
  * The log output macros print output to the console. These macros produce
@@ -75,20 +65,11 @@ void realm_printf(const char *fmt, ...);
 # define VERBOSE(...)
 #endif
 
-#if ENABLE_BACKTRACE
-void backtrace(const char *cookie);
-#else
-#define backtrace(x)
-#endif
-
 /*
  * For the moment this panic function is very basic: report an error and
  * spin. This can be expanded in the future to provide more information.
  */
 void __attribute__((__noreturn__)) do_panic(const char *file, int line);
 #define panic()	do_panic(__FILE__, __LINE__)
-
-void __attribute__((__noreturn__)) do_bug_unreachable(const char *file, int line);
-#define bug_unreachable() do_bug_unreachable(__FILE__, __LINE__)
 
 #endif /* __DEBUG_H__ */
