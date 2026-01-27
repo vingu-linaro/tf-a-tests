@@ -24,9 +24,9 @@
 	exception-level = <2>; /* S-EL1 */
 	execution-state = <0>; /* AARCH64 */
 	load-address = <0x7200000>;
-	entrypoint-offset = <0x00004000>;
+	entrypoint-offset = <0x00002000>; /*Image after manifest and HOB list. */
 	xlat-granule = <0>; /* 4KiB */
-	boot-order = <0>;
+	boot-order = <2>;
 	messaging-method = <3>; /* Direct messaging only */
 	ns-interrupts-action = <2>; /* Managed exit is not supported */
 	notification-support; /* Support receipt of notifications. */
