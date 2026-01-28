@@ -1,0 +1,11 @@
+{
+"scmi-primary" : {
+	"image": "scmi.bin",
+	"pm": "scmi.dts",
+	"physical-load-address": "0x7200000",
+	"owner": "Plat",
+	"package": "tl_pkg",
+	"size": "0x300000"
+	}
+
+}
